@@ -1,3 +1,14 @@
+export interface InsectPhoto {
+  id: number;
+  url: string;
+  attribution: string;
+  license_code?: string;
+  original_dimensions?: {
+    width: number;
+    height: number;
+  };
+}
+
 export interface InsectObservation {
   id: number;
   place_guess?: string;
@@ -7,11 +18,7 @@ export interface InsectObservation {
     name: string;
     preferred_common_name?: string;
   };
-  photos: Array<{
-    id: number;
-    url: string;
-    attribution: string;
-  }>;
+  photos: InsectPhoto[];
 }
 
 export interface AnswerOption {

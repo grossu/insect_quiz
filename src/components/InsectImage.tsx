@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Maximize2, X, ZoomIn, ZoomOut, ExternalLink } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Maximize2, X, ZoomIn, ZoomOut, ExternalLink, AlertCircle } from 'lucide-react';
 import { InsectObservation } from '../types/insect';
+import { getImageUrl, getImageSrcSet, preloadImage } from '../utils/imageUtils';
 
 interface InsectImageProps {
   insect: InsectObservation;
@@ -10,6 +11,8 @@ export function InsectImage({ insect }: InsectImageProps) {
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [zoom, setZoom] = useState(1);
+  const [imageError, setImageError] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   const photos = insect.photos || [];
   const currentPhoto = photos[currentPhotoIndex];
@@ -17,7 +20,23 @@ export function InsectImage({ insect }: InsectImageProps) {
   useEffect(() => {
     setCurrentPhotoIndex(0);
     setZoom(1);
+    setImageError(false);
   }, [insect.id]);
+
+  useEffect(() => {
+    if (!currentPhoto?.url) return;
+
+    setIsLoading(true);
+    setImageError(false);
+
+    const largeUrl = getImageUrl(currentPhoto.url, 'large');
+    preloadImage(largeUrl)
+      .then(() => setIsLoading(false))
+      .catch(() => {
+        setImageError(true);
+        setIsLoading(false);
+      });
+  }, [currentPhoto?.url]);
 
   useEffect(() => {
     if (!isFullscreen) {
@@ -81,16 +100,41 @@ export function InsectImage({ insect }: InsectImageProps) {
     <>
       <div className="w-full max-w-2xl mx-auto">
         <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-          <div className="relative group">
-            <img
-              src={currentPhoto?.url.replace('square', 'medium')}
-              alt="Mystery insect"
-              className="w-full h-96 object-cover cursor-pointer"
-              onClick={() => setIsFullscreen(true)}
-            />
+          <div className="relative group bg-gray-100">
+            {imageError ? (
+              <div className="w-full h-96 flex items-center justify-center text-gray-400">
+                <div className="text-center">
+                  <AlertCircle size={48} className="mx-auto mb-2" />
+                  <p>Image unavailable</p>
+                </div>
+              </div>
+            ) : (
+              <>
+                {isLoading && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+                    <div className="animate-spin rounded-full h-12 w-12 border-4 border-gray-300 border-t-green-600"></div>
+                  </div>
+                )}
+                <img
+                  src={getImageUrl(currentPhoto?.url || '', 'large')}
+                  srcSet={getImageSrcSet(currentPhoto?.url || '')}
+                  sizes="(max-width: 768px) 100vw, 768px"
+                  alt="Mystery insect"
+                  className="w-full h-96 object-cover cursor-pointer transition-opacity duration-300"
+                  style={{
+                    opacity: isLoading ? 0 : 1,
+                    imageRendering: 'crisp-edges',
+                  }}
+                  onClick={() => setIsFullscreen(true)}
+                  onError={() => setImageError(true)}
+                  loading="eager"
+                />
+              </>
+            )}
             <button
               onClick={() => setIsFullscreen(true)}
               className="absolute top-4 right-4 p-2 bg-black/50 hover:bg-black/70 text-white rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+              disabled={imageError}
             >
               <Maximize2 size={20} />
             </button>
@@ -200,11 +244,18 @@ export function InsectImage({ insect }: InsectImageProps) {
           </div>
 
           <img
-            src={currentPhoto?.url.replace('square', 'original')}
+            src={getImageUrl(currentPhoto?.url || '', 'original')}
             alt="Mystery insect - fullscreen"
             className="max-w-full max-h-full object-contain transition-transform duration-200"
-            style={{ transform: `scale(${zoom})` }}
+            style={{
+              transform: `scale(${zoom})`,
+              imageRendering: zoom > 1 ? 'auto' : 'crisp-edges',
+            }}
             onClick={(e) => e.stopPropagation()}
+            onError={(e) => {
+              const target = e.target as HTMLImageElement;
+              target.src = getImageUrl(currentPhoto?.url || '', 'large');
+            }}
           />
           {photos.length > 1 && (
             <>

@@ -2,6 +2,31 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  /* Глобальные оптимизации для изображений */
+  img {
+    /* Предотвращение размытия при масштабировании */
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+
+    /* Аппаратное ускорение для плавных трансформаций */
+    transform: translateZ(0);
+    will-change: transform, opacity;
+
+    /* Улучшенная производительность */
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+  }
+
+  /* Оптимизация для больших изображений */
+  img[src*="original"],
+  img[src*="large"] {
+    /* Для больших изображений используем более качественный рендеринг */
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: high-quality;
+  }
+}
+
 @layer utilities {
   @keyframes scale-in {
     from {
@@ -16,5 +41,21 @@
 
   .animate-scale-in {
     animation: scale-in 0.3s ease-out;
+  }
+
+  /* Утилиты для качественного отображения изображений */
+  .img-crisp {
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+  }
+
+  .img-smooth {
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: auto;
+  }
+
+  .img-high-quality {
+    image-rendering: high-quality;
+    image-rendering: -webkit-optimize-contrast;
   }
 }
