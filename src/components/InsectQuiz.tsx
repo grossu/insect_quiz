@@ -1,6 +1,6 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { Bug, RefreshCw } from 'lucide-react';
-import { QuizState } from '../types/insect';
+import { QuizState, AnswerHistoryEntry } from '../types/insect';
 import { fetchQuizQuestion } from '../services/inaturalist';
 import { InsectImage } from './InsectImage';
 import { AnswerForm } from './AnswerForm';
@@ -8,6 +8,7 @@ import { ResultModal } from './ResultModal';
 import { ScoreBoard } from './ScoreBoard';
 import { CountrySelector } from './CountrySelector';
 import { TaxonFilter } from './TaxonFilter';
+import { AnswerHistory } from './AnswerHistory';
 
 export function InsectQuiz() {
   const [selectedCountryId, setSelectedCountryId] = useState(7161);
@@ -23,6 +24,7 @@ export function InsectQuiz() {
   });
 
   const [error, setError] = useState<string | null>(null);
+  const [answerHistory, setAnswerHistory] = useState<AnswerHistoryEntry[]>([]);
 
   const loadNewQuestion = async () => {
     setState(prev => ({ ...prev, isLoading: true }));
@@ -59,6 +61,26 @@ export function InsectQuiz() {
 
     const isCorrect = state.selectedAnswerId === state.currentQuestion.correctAnswerId;
 
+    const userAnswerOption = state.currentQuestion.options.find(
+      opt => opt.id === state.selectedAnswerId
+    );
+
+    const correctAnswerOption = state.currentQuestion.options.find(
+      opt => opt.id === state.currentQuestion.correctAnswerId
+    );
+
+    if (userAnswerOption && correctAnswerOption) {
+      const newEntry: AnswerHistoryEntry = {
+        userAnswer: userAnswerOption.name,
+        correctAnswer: correctAnswerOption.name,
+        isCorrect,
+        observationId: state.currentQuestion.insect.id,
+        timestamp: Date.now(),
+      };
+
+      setAnswerHistory(prev => [newEntry, ...prev].slice(0, 10));
+    }
+
     setState(prev => ({
       ...prev,
       showResult: true,
@@ -78,6 +100,7 @@ export function InsectQuiz() {
       score: 0,
       attempts: 0,
     }));
+    setAnswerHistory([]);
     loadNewQuestion();
   };
 
@@ -141,6 +164,8 @@ export function InsectQuiz() {
             />
           </>
         ) : null}
+
+        <AnswerHistory history={answerHistory} />
 
         {state.attempts > 0 && (
           <div className="text-center mt-8">

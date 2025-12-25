@@ -36,3 +36,11 @@ export interface QuizState {
   attempts: number;
   isLoading: boolean;
 }
+
+export interface AnswerHistoryEntry {
+  userAnswer: string;
+  correctAnswer: string;
+  isCorrect: boolean;
+  observationId: number;
+  timestamp: number;
+}
