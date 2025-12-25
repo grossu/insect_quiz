@@ -6,8 +6,7 @@ import { InsectImage } from './InsectImage';
 import { AnswerForm } from './AnswerForm';
 import { ResultModal } from './ResultModal';
 import { ScoreBoard } from './ScoreBoard';
-import { CountrySelector } from './CountrySelector';
-import { TaxonFilter } from './TaxonFilter';
+import { FiltersPanel } from './FiltersPanel';
 import { AnswerHistory } from './AnswerHistory';
 
 export function InsectQuiz() {
@@ -41,13 +40,14 @@ export function InsectQuiz() {
         isLoading: false,
       }));
     } catch (err) {
-      setError('Failed to load question. Please try again.');
+      setError('Не удалось загрузить вопрос. Пожалуйста, попробуйте снова.');
       setState(prev => ({ ...prev, isLoading: false }));
     }
   };
 
-  const handleCountryChange = (countryId: number) => {
+  const handleFiltersApply = (countryId: number, taxons: string[]) => {
     setSelectedCountryId(countryId);
+    setSelectedTaxons(taxons);
   };
 
   useEffect(() => {
@@ -117,14 +117,11 @@ export function InsectQuiz() {
           </p>
         </header>
 
-        <CountrySelector
+        <FiltersPanel
           selectedCountryId={selectedCountryId}
-          onCountryChange={handleCountryChange}
-        />
-
-        <TaxonFilter
           selectedTaxons={selectedTaxons}
-          onTaxonsChange={setSelectedTaxons}
+          onApply={handleFiltersApply}
+          isLoading={state.isLoading}
         />
 
         <ScoreBoard score={state.score} attempts={state.attempts} />
@@ -137,7 +134,7 @@ export function InsectQuiz() {
               className="mt-2 text-red-600 hover:text-red-800 font-medium flex items-center gap-2"
             >
               <RefreshCw size={16} />
-              Try again
+              Попробовать снова
             </button>
           </div>
         )}
@@ -146,7 +143,7 @@ export function InsectQuiz() {
           <div className="max-w-2xl mx-auto bg-white rounded-lg shadow-lg p-12">
             <div className="flex flex-col items-center justify-center">
               <RefreshCw size={48} className="text-green-600 animate-spin mb-4" />
-              <p className="text-gray-600 text-lg">Loading question...</p>
+              <p className="text-gray-600 text-lg">Загрузка вопроса...</p>
             </div>
           </div>
         ) : state.currentQuestion ? (
@@ -173,7 +170,7 @@ export function InsectQuiz() {
               onClick={handleReset}
               className="px-6 py-2 text-gray-600 hover:text-gray-800 font-medium transition-colors"
             >
-              Reset score
+              Сбросить счет
             </button>
           </div>
         )}

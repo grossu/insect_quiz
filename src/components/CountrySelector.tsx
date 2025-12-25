@@ -3,23 +3,24 @@ import { Globe } from 'lucide-react';
 interface Country {
   id: number;
   name: string;
+  nameRu: string;
 }
 
 const COUNTRIES: Country[] = [
-  { id: 7161, name: 'Russia' },
-  { id: 1, name: 'United States' },
-  { id: 2, name: 'Canada' },
-  { id: 10, name: 'Brazil' },
-  { id: 16, name: 'China' },
-  { id: 34, name: 'France' },
-  { id: 39, name: 'Germany' },
-  { id: 43, name: 'India' },
-  { id: 72, name: 'Japan' },
-  { id: 107, name: 'Mexico' },
-  { id: 143, name: 'Spain' },
-  { id: 161, name: 'United Kingdom' },
-  { id: 20, name: 'Australia' },
-  { id: 32, name: 'Egypt' },
+  { id: 7161, name: 'Russia', nameRu: 'Россия' },
+  { id: 1, name: 'United States', nameRu: 'США' },
+  { id: 2, name: 'Canada', nameRu: 'Канада' },
+  { id: 10, name: 'Brazil', nameRu: 'Бразилия' },
+  { id: 16, name: 'China', nameRu: 'Китай' },
+  { id: 34, name: 'France', nameRu: 'Франция' },
+  { id: 39, name: 'Germany', nameRu: 'Германия' },
+  { id: 43, name: 'India', nameRu: 'Индия' },
+  { id: 72, name: 'Japan', nameRu: 'Япония' },
+  { id: 107, name: 'Mexico', nameRu: 'Мексика' },
+  { id: 143, name: 'Spain', nameRu: 'Испания' },
+  { id: 161, name: 'United Kingdom', nameRu: 'Великобритания' },
+  { id: 20, name: 'Australia', nameRu: 'Австралия' },
+  { id: 32, name: 'Egypt', nameRu: 'Египет' },
 ];
 
 interface CountrySelectorProps {
@@ -34,7 +35,7 @@ export function CountrySelector({ selectedCountryId, onCountryChange }: CountryS
         <div className="flex items-center gap-3 mb-3">
           <Globe size={20} className="text-blue-600" />
           <label htmlFor="country" className="text-sm font-medium text-gray-700">
-            Select country:
+            Страна:
           </label>
         </div>
         <select
@@ -45,7 +46,7 @@ export function CountrySelector({ selectedCountryId, onCountryChange }: CountryS
         >
           {COUNTRIES.map((country) => (
             <option key={country.id} value={country.id}>
-              {country.name}
+              {country.nameRu}
             </option>
           ))}
         </select>

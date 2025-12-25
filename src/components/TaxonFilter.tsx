@@ -33,7 +33,7 @@ export function TaxonFilter({ selectedTaxons, onTaxonsChange }: TaxonFilterProps
   return (
     <div className="max-w-4xl mx-auto mb-6">
       <div className="bg-white rounded-lg shadow-md p-4">
-        <h2 className="text-base font-semibold text-gray-800 mb-3">Filter by taxon</h2>
+        <h2 className="text-base font-semibold text-gray-800 mb-3">Фильтр по таксонам</h2>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
           {AVAILABLE_TAXONS.map((taxon) => {
             const isSelected = selectedTaxons.includes(taxon.id);
@@ -69,13 +69,13 @@ export function TaxonFilter({ selectedTaxons, onTaxonsChange }: TaxonFilterProps
         {selectedTaxons.length > 0 && (
           <div className="mt-3 flex items-center justify-between">
             <p className="text-xs text-gray-600">
-              Selected: {selectedTaxons.length} {selectedTaxons.length === 1 ? 'taxon' : 'taxons'}
+              Выбрано: {selectedTaxons.length} {selectedTaxons.length === 1 ? 'таксон' : selectedTaxons.length < 5 ? 'таксона' : 'таксонов'}
             </p>
             <button
               onClick={() => onTaxonsChange([])}
               className="text-xs text-gray-600 hover:text-gray-800 font-medium transition-colors"
             >
-              Clear all
+              Очистить
             </button>
           </div>
         )}
