@@ -16,7 +16,8 @@ export async function fetchRandomInsect(
     page: '1',
     order: 'desc',
     order_by: 'created_at',
-    without_taxon_id: '1269340'
+    without_taxon_id: '1269340',
+    popular: 'true'
   };
 
   const initialResponse = await fetch(
@@ -47,7 +48,8 @@ export async function fetchRandomInsect(
     page: randomPage.toString(),
     order: 'desc',
     order_by: 'created_at',
-    without_taxon_id: '1269340'
+    without_taxon_id: '1269340',
+    popular: 'true'
   };
 
   const response = await fetch(
