@@ -1,4 +1,4 @@
-import { ExternalLink, CheckCircle2, XCircle } from 'lucide-react';
+import { ExternalLink, CheckCircle2, XCircle, ArrowRight } from 'lucide-react';
 import { AnswerHistoryEntry } from '../types/insect';
 
 interface AnswerHistoryProps {
@@ -17,57 +17,47 @@ export function AnswerHistory({ history }: AnswerHistoryProps) {
       </h2>
       <div className="bg-white rounded-lg shadow-lg overflow-hidden">
         <div className="divide-y divide-gray-200">
-          {history.map((entry, index) => (
+          {history.map((entry) => (
             <div
               key={entry.timestamp}
-              className={`p-4 transition-colors ${
+              className={`px-4 py-3 transition-colors ${
                 entry.isCorrect ? 'bg-green-50' : 'bg-red-50'
               }`}
             >
-              <div className="flex items-start gap-4">
-                <div className="flex-shrink-0 mt-1">
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex-shrink-0">
                   {entry.isCorrect ? (
-                    <CheckCircle2 size={24} className="text-green-600" />
+                    <CheckCircle2 size={20} className="text-green-600" />
                   ) : (
-                    <XCircle size={24} className="text-red-600" />
+                    <XCircle size={20} className="text-red-600" />
                   )}
                 </div>
 
-                <div className="flex-grow min-w-0">
-                  <div className="flex items-start justify-between gap-4 mb-2">
-                    <div className="flex-grow">
-                      <p className="text-sm text-gray-600 mb-1">
-                        Your answer:
-                      </p>
-                      <p className={`font-medium italic ${
-                        entry.isCorrect ? 'text-green-800' : 'text-red-800'
-                      }`}>
-                        {entry.userAnswer}
-                      </p>
-                    </div>
-                  </div>
+                <div className="flex items-center gap-2 flex-grow min-w-0">
+                  <span className={`font-medium italic truncate ${
+                    entry.isCorrect ? 'text-green-800' : 'text-red-800'
+                  }`}>
+                    {entry.userAnswer}
+                  </span>
 
                   {!entry.isCorrect && (
-                    <div className="mt-2">
-                      <p className="text-sm text-gray-600 mb-1">
-                        Correct answer:
-                      </p>
-                      <p className="font-medium italic text-green-800">
+                    <>
+                      <ArrowRight size={16} className="text-gray-400 flex-shrink-0" />
+                      <span className="font-medium italic text-green-800 truncate">
                         {entry.correctAnswer}
-                      </p>
-                    </div>
+                      </span>
+                    </>
                   )}
-
-                  <a
-                    href={`https://www.inaturalist.org/observations/${entry.observationId}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 mt-3 text-sm text-blue-600 hover:text-blue-800 transition-colors"
-                  >
-                    View on iNaturalist
-                    <ExternalLink size={14} />
-                  </a>
                 </div>
+
+                <a
+                  href={`https://www.inaturalist.org/observations/${entry.observationId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 transition-colors flex-shrink-0"
+                >
+                  <ExternalLink size={14} />
+                </a>
               </div>
             </div>
           ))}
