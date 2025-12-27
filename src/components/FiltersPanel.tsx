@@ -39,9 +39,9 @@ export const AVAILABLE_TAXONS: Taxon[] = [
   { id: '1269342', latinName: 'Pompiloidea', russianName: 'Дорожные осы' },
   { id: '1269344', latinName: 'Scolioidea', russianName: 'Сколии' },
   { id: '52747', latinName: 'Vespidae', russianName: 'Настоящие осы' },
-  { id: '47617', latinName: 'Ichneumonoidea', russianName: 'Наездники' },
-  { id: '52804', latinName: 'Crabronidae', russianName: 'Песочные осы' },
-  { id: '52821', latinName: 'Sphecidae', russianName: 'Роющие осы' },
+  { id: '47200', latinName: 'Ichneumonoidea', russianName: 'Наездники' },
+  { id: '51955', latinName: 'Crabronidae', russianName: 'Песочные осы' },
+  { id: '48742', latinName: 'Sphecidae', russianName: 'Роющие осы' },
 ];
 
 interface FiltersPanelProps {
