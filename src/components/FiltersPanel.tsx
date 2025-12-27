@@ -28,7 +28,7 @@ export const AVAILABLE_COUNTRIES: Country[] = [
   { id: 72, name: 'Japan', nameRu: 'Япония' },
   { id: 107, name: 'Mexico', nameRu: 'Мексика' },
   { id: 143, name: 'Spain', nameRu: 'Испания' },
-  { id: 161, name: 'United Kingdom', nameRu: 'Великобритания' },
+  { id: 6857, name: 'United Kingdom', nameRu: 'Великобритания' },
   { id: 20, name: 'Australia', nameRu: 'Австралия' },
   { id: 32, name: 'Egypt', nameRu: 'Египет' },
 ];
