@@ -15,7 +15,7 @@ export function ScoreBoard({ score, attempts }: ScoreBoardProps) {
           <div className="flex items-center gap-3">
             <Trophy className="text-yellow-500" size={32} />
             <div>
-              <p className="text-sm text-gray-600">Score</p>
+              <p className="text-sm text-gray-600">Очки</p>
               <p className="text-2xl font-bold text-gray-800">{score}</p>
             </div>
           </div>
@@ -25,7 +25,7 @@ export function ScoreBoard({ score, attempts }: ScoreBoardProps) {
           <div className="flex items-center gap-3">
             <Target className="text-blue-500" size={32} />
             <div>
-              <p className="text-sm text-gray-600">Attempts</p>
+              <p className="text-sm text-gray-600">Попытки</p>
               <p className="text-2xl font-bold text-gray-800">{attempts}</p>
             </div>
           </div>
@@ -33,7 +33,7 @@ export function ScoreBoard({ score, attempts }: ScoreBoardProps) {
           <div className="h-12 w-px bg-gray-300"></div>
 
           <div>
-            <p className="text-sm text-gray-600">Accuracy</p>
+            <p className="text-sm text-gray-600">Точность</p>
             <p className="text-2xl font-bold text-gray-800">{percentage}%</p>
           </div>
         </div>

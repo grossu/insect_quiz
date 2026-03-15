@@ -51,3 +51,15 @@ export interface AnswerHistoryEntry {
   observationId: number;
   timestamp: number;
 }
+
+export interface Country {
+  id: number;
+  name: string;
+  nameRu: string;
+}
+
+export interface Taxon {
+  id: string;
+  latinName: string;
+  russianName: string;
+}

@@ -20,15 +20,15 @@ export function ResultModal({ isCorrect, correctAnswer, commonName, observationI
               <CheckCircle size={64} className="mx-auto text-green-500 mb-4" />
               <h2 className="text-3xl font-bold text-green-600 mb-2">Верно!</h2>
               <p className="text-gray-600 mb-4">
-                You successfully identified the insect!
+                Вы правильно определили насекомое!
               </p>
             </>
           ) : (
             <>
               <XCircle size={64} className="mx-auto text-red-500 mb-4" />
-              <h2 className="text-3xl font-bold text-red-600 mb-2">Not quite!</h2>
+              <h2 className="text-3xl font-bold text-red-600 mb-2">Не угадали!</h2>
               <p className="text-gray-600 mb-4">
-                The correct answer is:
+                Правильный ответ:
               </p>
             </>
           )}
@@ -51,14 +51,14 @@ export function ResultModal({ isCorrect, correctAnswer, commonName, observationI
             className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-800 font-medium transition-colors mb-4"
           >
             <ExternalLink size={16} />
-            View observation on iNaturalist
+            Посмотреть наблюдение на iNaturalist
           </a>
 
           <button
             onClick={onNext}
             className="mt-2 w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 text-lg font-medium"
           >
-            Next insect
+            Следующее насекомое
             <ArrowRight size={20} />
           </button>
         </div>
