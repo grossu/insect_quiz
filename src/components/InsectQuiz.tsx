@@ -105,15 +105,15 @@ export function InsectQuiz() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 py-8 px-4">
+    <div className="py-8 px-4">
       <div className="max-w-4xl mx-auto">
         <header className="text-center mb-8">
           <div className="flex items-center justify-center gap-3 mb-3">
             <Bug size={48} className="text-green-600" />
-            <h1 className="text-4xl font-bold text-gray-800">Hymenoptera Quiz</h1>
+            <h1 className="text-4xl font-bold text-gray-800">Викторина: Перепончатокрылые</h1>
           </div>
           <p className="text-gray-600 text-lg">
-            Identify ants, bees, and wasps by their scientific name
+            Определите муравьёв, пчёл и ос по научному названию
           </p>
         </header>
 

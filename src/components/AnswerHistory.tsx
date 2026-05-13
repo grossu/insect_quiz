@@ -13,7 +13,7 @@ export function AnswerHistory({ history }: AnswerHistoryProps) {
   return (
     <div className="max-w-2xl mx-auto mt-8">
       <h2 className="text-2xl font-bold text-gray-800 mb-4 text-center">
-        Answer History
+        История ответов
       </h2>
       <div className="bg-white rounded-lg shadow-lg overflow-hidden">
         <div className="divide-y divide-gray-200">

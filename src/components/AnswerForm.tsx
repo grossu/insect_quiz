@@ -48,7 +48,7 @@ export function AnswerForm({
     <form onSubmit={onSubmit} className="w-full max-w-2xl mx-auto mt-8">
       <div className="bg-white rounded-lg shadow-lg p-6">
         <h2 className="text-xl font-semibold text-gray-800 mb-4">
-          Identify the species:
+          Определите вид:
         </h2>
 
         <div className="grid grid-cols-2 gap-3 mb-6">
@@ -84,7 +84,7 @@ export function AnswerForm({
             className="flex-1 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 font-medium"
           >
             <Send size={20} />
-            Check Answer
+            Проверить ответ
           </button>
           <button
             type="button"
@@ -93,7 +93,7 @@ export function AnswerForm({
             className="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
           >
             <SkipForward size={20} />
-            Skip
+            Пропустить
           </button>
         </div>
       </div>
