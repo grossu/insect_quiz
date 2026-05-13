@@ -1,4 +1,4 @@
-import { InsectObservation, QuizQuestion, AnswerOption } from '../types/insect';
+import { InsectObservation, QuizQuestion, AnswerOption, InatSpeciesCountResult } from '../types/insect';
 
 const INATURALIST_API = 'https://api.inaturalist.org/v1';
 
@@ -179,4 +179,99 @@ export async function fetchQuizQuestion(
     options: shuffledOptions,
     correctAnswerId: insect.taxon.id,
   };
+}
+
+// --- Checklist API functions ---
+
+async function fetchAllSpeciesCounts(
+  params: Record<string, string>
+): Promise<InatSpeciesCountResult[]> {
+  const PER_PAGE = 500;
+  const firstRes = await fetch(
+    `${INATURALIST_API}/observations/species_counts?` +
+      new URLSearchParams({ ...params, per_page: String(PER_PAGE), page: '1' })
+  );
+  if (!firstRes.ok) throw new Error('iNat species_counts fetch failed');
+  const firstData = await firstRes.json();
+
+  const results: InatSpeciesCountResult[] = firstData.results ?? [];
+  const total: number = firstData.total_results ?? 0;
+  if (total <= PER_PAGE) return results;
+
+  const totalPages = Math.ceil(total / PER_PAGE);
+  const rest = await Promise.all(
+    Array.from({ length: totalPages - 1 }, (_, i) => i + 2).map(async (page) => {
+      const r = await fetch(
+        `${INATURALIST_API}/observations/species_counts?` +
+          new URLSearchParams({ ...params, per_page: String(PER_PAGE), page: String(page) })
+      );
+      if (!r.ok) return [] as InatSpeciesCountResult[];
+      const d = await r.json();
+      return (d.results ?? []) as InatSpeciesCountResult[];
+    })
+  );
+  return results.concat(...rest);
+}
+
+export async function fetchRegionalSpecies(
+  taxonIds: number[],
+  placeIds: number[]
+): Promise<InatSpeciesCountResult[]> {
+  return fetchAllSpeciesCounts({
+    taxon_id: taxonIds.join(','),
+    place_id: placeIds.join(','),
+    quality_grade: 'research',
+    rank: 'species',
+    locale: 'ru',
+  });
+}
+
+export async function fetchUserSpeciesInRegion(
+  userLogin: string,
+  taxonIds: number[],
+  placeIds: number[]
+): Promise<InatSpeciesCountResult[]> {
+  return fetchAllSpeciesCounts({
+    user_login: userLogin,
+    taxon_id: taxonIds.join(','),
+    place_id: placeIds.join(','),
+    rank: 'species',
+    locale: 'ru',
+  });
+}
+
+export async function fetchUserResearchSpeciesInRegion(
+  userLogin: string,
+  taxonIds: number[],
+  placeIds: number[]
+): Promise<InatSpeciesCountResult[]> {
+  return fetchAllSpeciesCounts({
+    user_login: userLogin,
+    taxon_id: taxonIds.join(','),
+    place_id: placeIds.join(','),
+    quality_grade: 'research',
+    rank: 'species',
+    locale: 'ru',
+  });
+}
+
+export async function fetchRussianNames(taxonIds: number[]): Promise<Map<number, string>> {
+  const CONCURRENCY = 10;
+  const result = new Map<number, string>();
+  for (let i = 0; i < taxonIds.length; i += CONCURRENCY) {
+    await Promise.all(
+      taxonIds.slice(i, i + CONCURRENCY).map(async (id) => {
+        try {
+          const r = await fetch(`${INATURALIST_API}/taxa/${id}?locale=ru`);
+          if (!r.ok) return;
+          const d = await r.json();
+          const name = d.results?.[0]?.preferred_common_name;
+          if (name) result.set(id, name);
+        } catch {
+          // skip
+        }
+      })
+    );
+  }
+  return result;
 }

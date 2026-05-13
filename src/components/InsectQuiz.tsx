@@ -105,7 +105,7 @@ export function InsectQuiz() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 py-8 px-4">
+    <div className="py-8 px-4">
       <div className="max-w-4xl mx-auto">
         <header className="text-center mb-8">
           <div className="flex items-center justify-center gap-3 mb-3">
