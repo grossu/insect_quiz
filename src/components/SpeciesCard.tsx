@@ -8,6 +8,11 @@ interface SpeciesCardProps {
   found?: boolean;
 }
 
+function formatDate(iso: string): string {
+  const [y, m, d] = iso.split('-');
+  return `${d}.${m}.${y}`;
+}
+
 function countBadgeClass(count: number): string {
   if (count >= 10) return 'bg-green-100 text-green-800';
   if (count >= 3) return 'bg-amber-100 text-amber-800';
@@ -78,6 +83,11 @@ export function SpeciesCard({ species, placeIds, found = false }: SpeciesCardPro
         {species.russianName && (
           <span className="text-xs text-gray-500 leading-tight truncate">
             {species.russianName}
+          </span>
+        )}
+        {species.firstObservedOn && (
+          <span className="text-xs text-gray-400 leading-tight">
+            {formatDate(species.firstObservedOn)}
           </span>
         )}
       </div>

@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
-import { ChevronDown, ChevronRight, RefreshCw, AlertCircle } from 'lucide-react';
-import { ChecklistSpecies } from '../types/insect';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { ChevronDown, ChevronRight, RefreshCw, AlertCircle, LayoutGrid, List } from 'lucide-react';
+import { ChecklistSpecies, InatSpeciesCountResult } from '../types/insect';
 import {
   CHECKLIST_FAMILY_GROUPS,
   CHECKLIST_REGIONS,
@@ -13,40 +13,97 @@ import {
   fetchUserSpeciesInRegion,
   fetchUserResearchSpeciesInRegion,
   fetchRussianNames,
+  fetchUserFirstObservations,
 } from '../services/inaturalist';
 import { SpeciesCard } from './SpeciesCard';
 
 type LoadState = 'idle' | 'loading' | 'enriching' | 'done' | 'error';
+type ViewMode = 'cards' | 'list';
+
+interface SectionGroup {
+  key: string;
+  label: string;
+  species: ChecklistSpecies[];
+}
+
+function formatDate(iso: string): string {
+  const [y, m, d] = iso.split('-');
+  return `${d}.${m}.${y}`;
+}
+
+function StatusIcon({ species }: { species: ChecklistSpecies }) {
+  if (species.found && species.foundConfirmed) {
+    return (
+      <span className="flex-shrink-0 w-5 h-5 rounded-full bg-green-500 flex items-center justify-center">
+        <svg className="w-3 h-3 text-white" viewBox="0 0 20 20" fill="currentColor">
+          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+        </svg>
+      </span>
+    );
+  }
+  if (species.found) {
+    return (
+      <span className="flex-shrink-0 w-5 h-5 rounded-full bg-amber-400 flex items-center justify-center">
+        <svg className="w-3 h-3 text-white" viewBox="0 0 20 20" fill="currentColor">
+          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 102 0V6zm-1 8a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+        </svg>
+      </span>
+    );
+  }
+  return (
+    <span className="flex-shrink-0 w-5 h-5 rounded-full border-2 border-gray-300" />
+  );
+}
 
 export function RegionalChecklist() {
   const [selectedGroupId, setSelectedGroupId] = useState(CHECKLIST_FAMILY_GROUPS[0].id);
-  const [selectedRegionId] = useState(CHECKLIST_REGIONS[0].id);
+  const [selectedRegionId, setSelectedRegionId] = useState(CHECKLIST_REGIONS[0].id);
   const [loadState, setLoadState] = useState<LoadState>('idle');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [allSpecies, setAllSpecies] = useState<ChecklistSpecies[]>([]);
-  const [collapsedFamilies, setCollapsedFamilies] = useState<Set<number>>(new Set());
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [viewMode, setViewMode] = useState<ViewMode>('cards');
 
   const region = CHECKLIST_REGIONS.find(r => r.id === selectedRegionId)!;
+  const currentGroup = CHECKLIST_FAMILY_GROUPS.find(g => g.id === selectedGroupId)!;
 
   const foundCount = allSpecies.filter(s => s.found).length;
   const total = allSpecies.length;
   const pct = total > 0 ? Math.round((foundCount / total) * 100) : 0;
 
-  const currentGroup = CHECKLIST_FAMILY_GROUPS.find(g => g.id === selectedGroupId)!;
-  const familyGroups = currentGroup.taxonIds
-    .map(familyTaxonId => ({
-      familyTaxonId,
-      familyName: FAMILY_NAMES[familyTaxonId] ?? 'Unknown',
-      species: allSpecies
-        .filter(s => s.familyTaxonId === familyTaxonId)
-        .sort((a, b) => a.latinName.localeCompare(b.latinName)),
-    }))
-    .filter(g => g.species.length > 0);
+  const sections: SectionGroup[] = useMemo(() => {
+    if (currentGroup.groupByGenus) {
+      const byGenus = new Map<string, ChecklistSpecies[]>();
+      for (const s of allSpecies) {
+        const genus = s.latinName.split(' ')[0];
+        if (!byGenus.has(genus)) byGenus.set(genus, []);
+        byGenus.get(genus)!.push(s);
+      }
+      return [...byGenus.entries()]
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([genus, spp]) => ({
+          key: genus,
+          label: genus,
+          species: [...spp].sort((a, b) => a.latinName.localeCompare(b.latinName)),
+        }));
+    }
 
-  const toggleFamily = (id: number) =>
-    setCollapsedFamilies(prev => {
+    const displayIds = currentGroup.subgroupIds ?? currentGroup.taxonIds;
+    return displayIds
+      .map(id => ({
+        key: String(id),
+        label: FAMILY_NAMES[id] ?? 'Unknown',
+        species: allSpecies
+          .filter(s => s.familyTaxonId === id)
+          .sort((a, b) => a.latinName.localeCompare(b.latinName)),
+      }))
+      .filter(g => g.species.length > 0);
+  }, [allSpecies, currentGroup]);
+
+  const toggleSection = (key: string) =>
+    setCollapsed(prev => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      next.has(key) ? next.delete(key) : next.add(key);
       return next;
     });
 
@@ -54,58 +111,89 @@ export function RegionalChecklist() {
     async (forceRefresh = false) => {
       const group = CHECKLIST_FAMILY_GROUPS.find(g => g.id === selectedGroupId)!;
       const reg = CHECKLIST_REGIONS.find(r => r.id === selectedRegionId)!;
+      const cacheIds = group.subgroupIds ?? group.taxonIds;
 
       setLoadState('loading');
       setErrorMsg(null);
       setAllSpecies([]);
-      setCollapsedFamilies(new Set());
+      setCollapsed(new Set());
 
       try {
-        let allResults = null;
-        let userResults = null;
-        let userResearchResults = null;
+        let allRaw: InatSpeciesCountResult[] = [];
+        let familyAssignments: Record<number, number> = {};
+        let userResults: InatSpeciesCountResult[] | null = null;
+        let userResearchResults: InatSpeciesCountResult[] | null = null;
+        let firstObservations: Record<number, string> = {};
 
         if (!forceRefresh) {
-          const cached = readCache(group.taxonIds, reg.placeIds);
-          if (cached && cached.userResearchSpecies) {
-            allResults = cached.allSpecies;
+          const cached = readCache(cacheIds, reg.placeIds);
+          if (cached?.userResearchSpecies) {
+            allRaw = cached.allSpecies;
+            familyAssignments = cached.familyAssignments ?? {};
             userResults = cached.userSpecies;
             userResearchResults = cached.userResearchSpecies;
+            firstObservations = cached.firstObservations ?? {};
           }
         } else {
-          invalidateCache(group.taxonIds, reg.placeIds);
+          invalidateCache(cacheIds, reg.placeIds);
         }
 
-        if (!allResults || !userResults || !userResearchResults) {
-          [allResults, userResults, userResearchResults] = await Promise.all([
-            fetchRegionalSpecies(group.taxonIds, reg.placeIds),
+        if (!userResults || !userResearchResults) {
+          if (group.subgroupIds?.length) {
+            const perSubgroup = await Promise.all(
+              group.subgroupIds.map(sgId => fetchRegionalSpecies([sgId], reg.placeIds))
+            );
+            familyAssignments = {};
+            allRaw = [];
+            perSubgroup.forEach((results, i) => {
+              const sgId = group.subgroupIds![i];
+              results.forEach(r => {
+                familyAssignments[r.taxon.id] = sgId;
+                allRaw.push(r);
+              });
+            });
+          } else {
+            allRaw = await fetchRegionalSpecies(group.taxonIds, reg.placeIds);
+            familyAssignments = {};
+            allRaw.forEach(r => {
+              const match = group.taxonIds.find(id =>
+                r.taxon.ancestor_ids?.includes(id) || r.taxon.id === id
+              );
+              if (match !== undefined) familyAssignments[r.taxon.id] = match;
+            });
+          }
+
+          [userResults, userResearchResults] = await Promise.all([
             fetchUserSpeciesInRegion(CHECKLIST_USER_LOGIN, group.taxonIds, reg.placeIds),
             fetchUserResearchSpeciesInRegion(CHECKLIST_USER_LOGIN, group.taxonIds, reg.placeIds),
           ]);
-          writeCache(group.taxonIds, reg.placeIds, {
-            allSpecies: allResults,
+
+          firstObservations = Object.fromEntries(
+            await fetchUserFirstObservations(CHECKLIST_USER_LOGIN, group.taxonIds, reg.placeIds)
+          );
+
+          writeCache(cacheIds, reg.placeIds, {
+            allSpecies: allRaw,
+            familyAssignments,
             userSpecies: userResults,
             userResearchSpecies: userResearchResults,
+            firstObservations,
           });
         }
 
         const foundIds = new Set(userResults.map(r => r.taxon.id));
         const foundResearchIds = new Set(userResearchResults.map(r => r.taxon.id));
 
-        const initial: ChecklistSpecies[] = allResults.map(r => {
-          const familyTaxonId = group.taxonIds.find(id =>
-            r.taxon.ancestor_ids?.includes(id) || r.taxon.id === id
-          );
-          return {
-            taxonId: r.taxon.id,
-            latinName: r.taxon.name,
-            photoUrl: r.taxon.default_photo?.url,
-            regionalCount: r.count,
-            found: foundIds.has(r.taxon.id),
-            foundConfirmed: foundResearchIds.has(r.taxon.id),
-            familyTaxonId,
-          };
-        });
+        const initial: ChecklistSpecies[] = allRaw.map(r => ({
+          taxonId: r.taxon.id,
+          latinName: r.taxon.name,
+          photoUrl: r.taxon.default_photo?.url,
+          regionalCount: r.count,
+          found: foundIds.has(r.taxon.id),
+          foundConfirmed: foundResearchIds.has(r.taxon.id),
+          familyTaxonId: familyAssignments[r.taxon.id],
+          firstObservedOn: firstObservations[r.taxon.id],
+        }));
 
         setAllSpecies(initial);
         setLoadState('enriching');
@@ -133,6 +221,24 @@ export function RegionalChecklist() {
 
   return (
     <div className="w-full max-w-4xl mx-auto px-4 py-6">
+
+      {/* Region selector */}
+      <div className="flex gap-2 mb-4">
+        {CHECKLIST_REGIONS.map(r => (
+          <button
+            key={r.id}
+            onClick={() => setSelectedRegionId(r.id)}
+            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+              selectedRegionId === r.id
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-white text-gray-600 border border-gray-300 hover:border-blue-400 hover:text-blue-700'
+            }`}
+          >
+            {r.labelRu}
+          </button>
+        ))}
+      </div>
+
       {/* Family group selector */}
       <div className="flex flex-wrap gap-2 mb-5">
         {CHECKLIST_FAMILY_GROUPS.map(g => (
@@ -150,9 +256,28 @@ export function RegionalChecklist() {
         ))}
       </div>
 
-      {/* Region label + refresh */}
-      <div className="flex items-center justify-between mb-4">
-        <span className="text-sm text-gray-500">{region.labelRu}</span>
+      {/* Controls row: view toggle + refresh */}
+      <div className="flex items-center justify-end gap-3 mb-4">
+        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+          <button
+            onClick={() => setViewMode('cards')}
+            title="Карточки"
+            className={`p-1.5 rounded-md transition-colors ${
+              viewMode === 'cards' ? 'bg-white text-green-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'
+            }`}
+          >
+            <LayoutGrid size={15} />
+          </button>
+          <button
+            onClick={() => setViewMode('list')}
+            title="Список"
+            className={`p-1.5 rounded-md transition-colors ${
+              viewMode === 'list' ? 'bg-white text-green-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'
+            }`}
+          >
+            <List size={15} />
+          </button>
+        </div>
         <button
           onClick={() => load(true)}
           disabled={loadState === 'loading' || loadState === 'enriching'}
@@ -178,7 +303,6 @@ export function RegionalChecklist() {
               style={{ width: `${pct}%` }}
             />
           </div>
-          {/* Legend */}
           <div className="flex gap-4 mt-2 text-xs text-gray-500">
             <span className="flex items-center gap-1">
               <span className="w-3 h-3 rounded-full bg-green-500 inline-block" />
@@ -214,15 +338,15 @@ export function RegionalChecklist() {
         </div>
       )}
 
-      {/* Family groups */}
-      {(loadState === 'enriching' || loadState === 'done') && familyGroups.map(({ familyTaxonId, familyName, species }) => {
-        const isCollapsed = collapsedFamilies.has(familyTaxonId);
-        const foundInFamily = species.filter(s => s.found).length;
+      {/* Sections */}
+      {(loadState === 'enriching' || loadState === 'done') && sections.map(({ key, label, species }) => {
+        const isCollapsed = collapsed.has(key);
+        const foundInSection = species.filter(s => s.found).length;
 
         return (
-          <section key={familyTaxonId} className="mb-8">
+          <section key={key} className="mb-8">
             <button
-              onClick={() => toggleFamily(familyTaxonId)}
+              onClick={() => toggleSection(key)}
               className="flex items-center gap-2 mb-3 group"
             >
               {isCollapsed
@@ -230,10 +354,10 @@ export function RegionalChecklist() {
                 : <ChevronDown size={16} className="text-gray-400 group-hover:text-green-600 transition-colors" />
               }
               <span className="text-base font-semibold italic text-gray-800 group-hover:text-green-700 transition-colors">
-                {familyName}
+                {label}
               </span>
               <span className="text-sm text-gray-400 font-normal not-italic">
-                {foundInFamily}/{species.length}
+                {foundInSection}/{species.length}
               </span>
               {loadState === 'enriching' && (
                 <span className="text-xs text-gray-300 font-normal not-italic animate-pulse ml-1">
@@ -242,11 +366,44 @@ export function RegionalChecklist() {
               )}
             </button>
 
-            {!isCollapsed && (
+            {!isCollapsed && viewMode === 'cards' && (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
                 {species.map(s => (
                   <SpeciesCard key={s.taxonId} species={s} placeIds={region.placeIds} found={s.found} />
                 ))}
+              </div>
+            )}
+
+            {!isCollapsed && viewMode === 'list' && (
+              <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                {species.map((s, idx) => {
+                  const inatUrl = `https://www.inaturalist.org/observations?taxon_id=${s.taxonId}&place_id=${region.placeIds.join(',')}`;
+                  const commonName = s.russianName;
+                  return (
+                    <a
+                      key={s.taxonId}
+                      href={inatUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`flex items-center gap-3 px-4 py-2 hover:bg-gray-50 transition-colors ${
+                        idx < species.length - 1 ? 'border-b border-gray-100' : ''
+                      }`}
+                    >
+                      <StatusIcon species={s} />
+                      <span className="text-sm italic text-gray-800 w-52 flex-shrink-0 truncate">
+                        {s.latinName}
+                      </span>
+                      <span className="text-sm text-gray-400 flex-1 truncate">
+                        {commonName ?? '—'}
+                      </span>
+                      {s.firstObservedOn && (
+                        <span className="text-xs text-gray-400 flex-shrink-0">
+                          {formatDate(s.firstObservedOn)}
+                        </span>
+                      )}
+                    </a>
+                  );
+                })}
               </div>
             )}
           </section>

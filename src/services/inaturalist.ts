@@ -275,3 +275,42 @@ export async function fetchRussianNames(taxonIds: number[]): Promise<Map<number,
   }
   return result;
 }
+
+export async function fetchUserFirstObservations(
+  userLogin: string,
+  taxonIds: number[],
+  placeIds: number[]
+): Promise<Map<number, string>> {
+  const result = new Map<number, string>();
+  try {
+    let page = 1;
+    while (true) {
+      const r = await fetch(
+        `${INATURALIST_API}/observations?` +
+          new URLSearchParams({
+            user_login: userLogin,
+            taxon_id: taxonIds.join(','),
+            place_id: placeIds.join(','),
+            order: 'asc',
+            order_by: 'observed_on',
+            per_page: '200',
+            page: String(page),
+            rank: 'species',
+          })
+      );
+      if (!r.ok) break;
+      const data = await r.json();
+      const obs: Array<{ taxon?: { id: number }; observed_on?: string }> = data.results ?? [];
+      for (const ob of obs) {
+        const tid = ob.taxon?.id;
+        const date = ob.observed_on;
+        if (tid && date && !result.has(tid)) result.set(tid, date);
+      }
+      if (obs.length < 200) break;
+      page++;
+    }
+  } catch {
+    // return whatever we got
+  }
+  return result;
+}

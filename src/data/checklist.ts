@@ -4,13 +4,14 @@ export const CHECKLIST_FAMILY_GROUPS: ChecklistFamilyGroup[] = [
   {
     id: 'apidae',
     labelRu: 'Пчёлы',
-    // Apidae, Colletidae, Halictidae, Andrenidae, Megachilidae
     taxonIds: [47221, 127740, 49707, 57668, 57660],
+    groupByGenus: true,
   },
   {
     id: 'vespidae',
     labelRu: 'Осы (Vespidae)',
     taxonIds: [52747],
+    subgroupIds: [84738, 343248, 119344],
   },
   {
     id: 'scoliidae',
@@ -30,23 +31,30 @@ export const CHECKLIST_REGIONS: ChecklistRegion[] = [
     labelRu: 'Москва и область',
     placeIds: [11818, 97179],
   },
+  {
+    id: 'russia',
+    labelRu: 'Россия',
+    placeIds: [7161],
+  },
 ];
 
 export const CHECKLIST_USER_LOGIN = 'grossu_m';
 export const CHECKLIST_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 export const FAMILY_NAMES: Record<number, string> = {
-  // Пчёлы
+  // Пчёлы (семейства)
   47221:  'Apidae',
   127740: 'Colletidae',
   49707:  'Halictidae',
   57668:  'Andrenidae',
   57660:  'Megachilidae',
-  // Осы
+  // Vespidae подсемейства
+  84738:  'Vespinae',
+  343248: 'Polistinae',
+  119344: 'Eumeninae',
+  // Одиночные семейства
   52747:  'Vespidae',
-  // Сколии
   51967:  'Scoliidae',
-  // Прочие осы
   126149: 'Chrysididae',
   54028:  'Pompilidae',
   48742:  'Sphecidae',

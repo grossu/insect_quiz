@@ -94,12 +94,15 @@ export interface ChecklistSpecies {
   found: boolean;
   foundConfirmed?: boolean;
   familyTaxonId?: number;
+  firstObservedOn?: string;
 }
 
 export interface ChecklistFamilyGroup {
   id: string;
   labelRu: string;
   taxonIds: number[];
+  subgroupIds?: number[];
+  groupByGenus?: boolean;
 }
 
 export interface ChecklistRegion {
@@ -111,6 +114,8 @@ export interface ChecklistRegion {
 export interface ChecklistCacheEntry {
   timestamp: number;
   allSpecies: InatSpeciesCountResult[];
+  familyAssignments?: Record<number, number>;
   userSpecies: InatSpeciesCountResult[];
   userResearchSpecies: InatSpeciesCountResult[];
+  firstObservations?: Record<number, string>;
 }
