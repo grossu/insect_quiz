@@ -88,6 +88,7 @@ export function RegionalChecklist() {
   const [allSpecies, setAllSpecies] = useState<ChecklistSpecies[]>([]);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<ViewMode>('cards');
+  const [speciesFilter, setSpeciesFilter] = useState<'all' | 'found' | 'notFound'>('all');
   const [obsHistory, setObsHistory] = useState<ObsPoint[]>([]);
   const [statsLoading, setStatsLoading] = useState(false);
 
@@ -98,10 +99,16 @@ export function RegionalChecklist() {
   const total = allSpecies.length;
   const pct = total > 0 ? Math.round((foundCount / total) * 100) : 0;
 
+  const visibleSpecies = useMemo(() => {
+    if (speciesFilter === 'found') return allSpecies.filter(s => s.found);
+    if (speciesFilter === 'notFound') return allSpecies.filter(s => !s.found);
+    return allSpecies;
+  }, [allSpecies, speciesFilter]);
+
   const sections: SectionGroup[] = useMemo(() => {
     if (currentGroup.groupByGenus) {
       const byGenus = new Map<string, ChecklistSpecies[]>();
-      for (const s of allSpecies) {
+      for (const s of visibleSpecies) {
         const genus = s.latinName.split(' ')[0];
         if (!byGenus.has(genus)) byGenus.set(genus, []);
         byGenus.get(genus)!.push(s);
@@ -120,12 +127,12 @@ export function RegionalChecklist() {
       .map(id => ({
         key: String(id),
         label: FAMILY_NAMES[id] ?? 'Unknown',
-        species: allSpecies
+        species: visibleSpecies
           .filter(s => s.familyTaxonId === id)
           .sort((a, b) => a.latinName.localeCompare(b.latinName)),
       }))
       .filter(g => g.species.length > 0);
-  }, [allSpecies, currentGroup]);
+  }, [visibleSpecies, currentGroup]);
 
   const toggleSection = (key: string) =>
     setCollapsed(prev => {
@@ -301,8 +308,25 @@ export function RegionalChecklist() {
         ))}
       </div>
 
-      {/* Controls row: view toggle + refresh */}
+      {/* Controls row: species filter + view toggle + refresh */}
       <div className="flex items-center justify-end gap-3 mb-4">
+        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+          {([
+            { id: 'all', label: 'Все' },
+            { id: 'found', label: 'Найденные' },
+            { id: 'notFound', label: 'Не найденные' },
+          ] as const).map(({ id, label }) => (
+            <button
+              key={id}
+              onClick={() => setSpeciesFilter(id)}
+              className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                speciesFilter === id ? 'bg-white text-green-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
           <button
             onClick={() => setViewMode('cards')}

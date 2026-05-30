@@ -89,14 +89,9 @@ export function ChecklistStats({ history, loading }: Props) {
     return [...ys].sort((a, b) => b.localeCompare(a));
   }, [history]);
 
-  const defaultPeriod: Period = years[0] ?? 'cur';
-  const [period, setPeriod] = useState<Period>(defaultPeriod);
+  const [period, setPeriod] = useState<Period>('all');
 
-  const activePeriod = years.length > 0 && period === defaultPeriod && !years.includes(period)
-    ? years[0]
-    : period;
-
-  const filtered = useMemo(() => filterHistory(history, activePeriod), [history, activePeriod]);
+  const filtered = useMemo(() => filterHistory(history, period), [history, period]);
   const stats = useMemo(() => computeStats(history, filtered), [history, filtered]);
 
   const today = new Date();
@@ -105,6 +100,7 @@ export function ChecklistStats({ history, loading }: Props) {
   const prevMonthLabel = prevMonth.toLocaleString('ru', { month: 'long' });
 
   const periodButtons: Array<{ id: Period; label: string }> = [
+    { id: 'all', label: 'Всё время' },
     ...years.map(y => ({ id: y, label: y })),
     { id: '30d', label: '30 дн.' },
     { id: 'cur', label: curMonthLabel },
@@ -121,7 +117,7 @@ export function ChecklistStats({ history, loading }: Props) {
               key={btn.id}
               onClick={() => setPeriod(btn.id)}
               className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
-                activePeriod === btn.id
+                period === btn.id
                   ? 'bg-gray-800 text-white'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
