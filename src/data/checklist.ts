@@ -36,6 +36,11 @@ export const CHECKLIST_REGIONS: ChecklistRegion[] = [
     labelRu: 'Россия',
     placeIds: [7161],
   },
+  {
+    id: 'world',
+    labelRu: 'Весь мир',
+    placeIds: [],
+  },
 ];
 
 export const CHECKLIST_USER_LOGIN = 'grossu_m';

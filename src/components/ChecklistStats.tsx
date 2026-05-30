@@ -1,14 +1,16 @@
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import { ObsPoint } from '../services/inaturalist';
+
+export type Period = string;
 
 interface Props {
   history: ObsPoint[];
   loading: boolean;
+  period: Period;
+  onPeriodChange: (p: Period) => void;
 }
 
-type Period = string;
-
-function getPeriodBounds(period: Period): { from: string; to: string } | null {
+export function getPeriodBounds(period: Period): { from: string; to: string } | null {
   const today = new Date();
   const pad = (n: number) => String(n).padStart(2, '0');
   const fmt = (d: Date) =>
@@ -42,7 +44,7 @@ function getPeriodBounds(period: Period): { from: string; to: string } | null {
   return null;
 }
 
-function filterHistory(history: ObsPoint[], period: Period): ObsPoint[] {
+export function filterByPeriod(history: ObsPoint[], period: Period): ObsPoint[] {
   const bounds = getPeriodBounds(period);
   if (!bounds) return history;
   return history.filter(o => o.observed_on >= bounds.from && o.observed_on <= bounds.to);
@@ -83,15 +85,13 @@ function StatCard({ label, value, loading }: { label: string; value: number; loa
   );
 }
 
-export function ChecklistStats({ history, loading }: Props) {
+export function ChecklistStats({ history, loading, period, onPeriodChange }: Props) {
   const years = useMemo(() => {
     const ys = new Set(history.map(o => o.observed_on.slice(0, 4)));
     return [...ys].sort((a, b) => b.localeCompare(a));
   }, [history]);
 
-  const [period, setPeriod] = useState<Period>('all');
-
-  const filtered = useMemo(() => filterHistory(history, period), [history, period]);
+  const filtered = useMemo(() => filterByPeriod(history, period), [history, period]);
   const stats = useMemo(() => computeStats(history, filtered), [history, filtered]);
 
   const today = new Date();
@@ -115,7 +115,7 @@ export function ChecklistStats({ history, loading }: Props) {
           : periodButtons.map(btn => (
             <button
               key={btn.id}
-              onClick={() => setPeriod(btn.id)}
+              onClick={() => onPeriodChange(btn.id)}
               className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
                 period === btn.id
                   ? 'bg-gray-800 text-white'
