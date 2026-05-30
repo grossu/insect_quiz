@@ -1,1 +1,0 @@
-insect_quiz
