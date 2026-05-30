@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { ChevronDown, ChevronRight, RefreshCw, AlertCircle, LayoutGrid, List } from 'lucide-react';
 import { ChecklistSpecies, InatSpeciesCountResult } from '../types/insect';
 import {
@@ -18,7 +18,8 @@ import {
   ObsPoint,
 } from '../services/inaturalist';
 import { SpeciesCard } from './SpeciesCard';
-import { ChecklistStats } from './ChecklistStats';
+import { ChecklistStats, Period, filterByPeriod } from './ChecklistStats';
+import { ChecklistCharts } from './ChecklistCharts';
 
 const HYMENOPTERA_TAXON_ID = 47201;
 const STATS_CACHE_TTL = 24 * 60 * 60 * 1000;
@@ -89,21 +90,34 @@ export function RegionalChecklist() {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<ViewMode>('cards');
   const [speciesFilter, setSpeciesFilter] = useState<'all' | 'found' | 'notFound'>('all');
+  const [period, setPeriod] = useState<Period>('all');
   const [obsHistory, setObsHistory] = useState<ObsPoint[]>([]);
   const [statsLoading, setStatsLoading] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
 
   const region = CHECKLIST_REGIONS.find(r => r.id === selectedRegionId)!;
   const currentGroup = CHECKLIST_FAMILY_GROUPS.find(g => g.id === selectedGroupId)!;
 
-  const foundCount = allSpecies.filter(s => s.found).length;
-  const total = allSpecies.length;
+  const periodFoundIds = useMemo(() => {
+    if (period === 'all') return null;
+    const filtered = filterByPeriod(obsHistory, period);
+    return new Set(filtered.map(o => o.taxonId));
+  }, [obsHistory, period]);
+
+  const speciesWithPeriod = useMemo(() => {
+    if (!periodFoundIds) return allSpecies;
+    return allSpecies.map(s => ({ ...s, found: periodFoundIds.has(s.taxonId), foundConfirmed: false }));
+  }, [allSpecies, periodFoundIds]);
+
+  const foundCount = speciesWithPeriod.filter(s => s.found).length;
+  const total = speciesWithPeriod.length;
   const pct = total > 0 ? Math.round((foundCount / total) * 100) : 0;
 
   const visibleSpecies = useMemo(() => {
-    if (speciesFilter === 'found') return allSpecies.filter(s => s.found);
-    if (speciesFilter === 'notFound') return allSpecies.filter(s => !s.found);
-    return allSpecies;
-  }, [allSpecies, speciesFilter]);
+    if (speciesFilter === 'found') return speciesWithPeriod.filter(s => s.found);
+    if (speciesFilter === 'notFound') return speciesWithPeriod.filter(s => !s.found);
+    return speciesWithPeriod;
+  }, [speciesWithPeriod, speciesFilter]);
 
   const sections: SectionGroup[] = useMemo(() => {
     if (currentGroup.groupByGenus) {
@@ -161,6 +175,11 @@ export function RegionalChecklist() {
 
   const load = useCallback(
     async (forceRefresh = false) => {
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+      const signal = controller.signal;
+
       const group = CHECKLIST_FAMILY_GROUPS.find(g => g.id === selectedGroupId)!;
       const reg = CHECKLIST_REGIONS.find(r => r.id === selectedRegionId)!;
       const cacheIds = group.subgroupIds ?? group.taxonIds;
@@ -191,9 +210,26 @@ export function RegionalChecklist() {
         }
 
         if (!userResults || !userResearchResults) {
-          if (group.subgroupIds?.length) {
+          const isWorld = reg.placeIds.length === 0;
+
+          if (isWorld) {
+            // Для «Весь мир» грузим только виды пользователя — не тянем весь мировой список
+            [userResults, userResearchResults] = await Promise.all([
+              fetchUserSpeciesInRegion(CHECKLIST_USER_LOGIN, group.taxonIds, [], signal),
+              fetchUserResearchSpeciesInRegion(CHECKLIST_USER_LOGIN, group.taxonIds, [], signal),
+            ]);
+            allRaw = userResults;
+            familyAssignments = {};
+            allRaw.forEach(r => {
+              const displayIds = group.subgroupIds ?? group.taxonIds;
+              const match = displayIds.find(id =>
+                r.taxon.ancestor_ids?.includes(id) || r.taxon.id === id
+              );
+              if (match !== undefined) familyAssignments[r.taxon.id] = match;
+            });
+          } else if (group.subgroupIds?.length) {
             const perSubgroup = await Promise.all(
-              group.subgroupIds.map(sgId => fetchRegionalSpecies([sgId], reg.placeIds))
+              group.subgroupIds.map(sgId => fetchRegionalSpecies([sgId], reg.placeIds, signal))
             );
             familyAssignments = {};
             allRaw = [];
@@ -205,7 +241,7 @@ export function RegionalChecklist() {
               });
             });
           } else {
-            allRaw = await fetchRegionalSpecies(group.taxonIds, reg.placeIds);
+            allRaw = await fetchRegionalSpecies(group.taxonIds, reg.placeIds, signal);
             familyAssignments = {};
             allRaw.forEach(r => {
               const match = group.taxonIds.find(id =>
@@ -215,10 +251,12 @@ export function RegionalChecklist() {
             });
           }
 
-          [userResults, userResearchResults] = await Promise.all([
-            fetchUserSpeciesInRegion(CHECKLIST_USER_LOGIN, group.taxonIds, reg.placeIds),
-            fetchUserResearchSpeciesInRegion(CHECKLIST_USER_LOGIN, group.taxonIds, reg.placeIds),
-          ]);
+          if (!isWorld) {
+            [userResults, userResearchResults] = await Promise.all([
+              fetchUserSpeciesInRegion(CHECKLIST_USER_LOGIN, group.taxonIds, reg.placeIds, signal),
+              fetchUserResearchSpeciesInRegion(CHECKLIST_USER_LOGIN, group.taxonIds, reg.placeIds, signal),
+            ]);
+          }
 
           firstObservations = Object.fromEntries(
             await fetchUserFirstObservations(CHECKLIST_USER_LOGIN, group.taxonIds, reg.placeIds)
@@ -251,15 +289,18 @@ export function RegionalChecklist() {
         setLoadState('enriching');
 
         const missingIds = initial.filter(s => !s.found).map(s => s.taxonId);
-        const russianNames = await fetchRussianNames(missingIds);
+        const russianNames = await fetchRussianNames(missingIds, signal);
 
-        setAllSpecies(prev =>
-          prev.map(s =>
-            russianNames.has(s.taxonId) ? { ...s, russianName: russianNames.get(s.taxonId) } : s
-          )
-        );
-        setLoadState('done');
+        if (!signal.aborted) {
+          setAllSpecies(prev =>
+            prev.map(s =>
+              russianNames.has(s.taxonId) ? { ...s, russianName: russianNames.get(s.taxonId) } : s
+            )
+          );
+          setLoadState('done');
+        }
       } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
         setErrorMsg(err instanceof Error ? err.message : 'Ошибка загрузки');
         setLoadState('error');
       }
@@ -358,7 +399,8 @@ export function RegionalChecklist() {
       </div>
 
       {/* Stats by year/month */}
-      <ChecklistStats history={obsHistory} loading={statsLoading} />
+      <ChecklistStats history={obsHistory} loading={statsLoading} period={period} onPeriodChange={setPeriod} />
+      <ChecklistCharts obsHistory={obsHistory} allSpecies={speciesWithPeriod} loading={statsLoading} period={period} />
 
       {/* Progress bar */}
       {(loadState === 'enriching' || loadState === 'done') && total > 0 && (
