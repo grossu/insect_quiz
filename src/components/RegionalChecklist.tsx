@@ -14,8 +14,33 @@ import {
   fetchUserResearchSpeciesInRegion,
   fetchRussianNames,
   fetchUserFirstObservations,
+  fetchUserObservationsAll,
+  ObsPoint,
 } from '../services/inaturalist';
 import { SpeciesCard } from './SpeciesCard';
+import { ChecklistStats } from './ChecklistStats';
+
+const HYMENOPTERA_TAXON_ID = 47201;
+const STATS_CACHE_TTL = 24 * 60 * 60 * 1000;
+
+function readStatsCache(regionId: string): ObsPoint[] | null {
+  try {
+    const raw = localStorage.getItem(`obs_stats_${regionId}`);
+    if (!raw) return null;
+    const { timestamp, history } = JSON.parse(raw);
+    if (Date.now() - timestamp > STATS_CACHE_TTL) {
+      localStorage.removeItem(`obs_stats_${regionId}`);
+      return null;
+    }
+    return history;
+  } catch { return null; }
+}
+
+function writeStatsCache(regionId: string, history: ObsPoint[]) {
+  try {
+    localStorage.setItem(`obs_stats_${regionId}`, JSON.stringify({ timestamp: Date.now(), history }));
+  } catch { /* quota */ }
+}
 
 type LoadState = 'idle' | 'loading' | 'enriching' | 'done' | 'error';
 type ViewMode = 'cards' | 'list';
@@ -63,6 +88,8 @@ export function RegionalChecklist() {
   const [allSpecies, setAllSpecies] = useState<ChecklistSpecies[]>([]);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<ViewMode>('cards');
+  const [obsHistory, setObsHistory] = useState<ObsPoint[]>([]);
+  const [statsLoading, setStatsLoading] = useState(false);
 
   const region = CHECKLIST_REGIONS.find(r => r.id === selectedRegionId)!;
   const currentGroup = CHECKLIST_FAMILY_GROUPS.find(g => g.id === selectedGroupId)!;
@@ -106,6 +133,24 @@ export function RegionalChecklist() {
       next.has(key) ? next.delete(key) : next.add(key);
       return next;
     });
+
+  const loadStats = useCallback(async () => {
+    const reg = CHECKLIST_REGIONS.find(r => r.id === selectedRegionId)!;
+    const cached = readStatsCache(selectedRegionId);
+    if (cached) { setObsHistory(cached); return; }
+    setStatsLoading(true);
+    try {
+      const history = await fetchUserObservationsAll(
+        CHECKLIST_USER_LOGIN, HYMENOPTERA_TAXON_ID, reg.placeIds
+      );
+      writeStatsCache(selectedRegionId, history);
+      setObsHistory(history);
+    } finally {
+      setStatsLoading(false);
+    }
+  }, [selectedRegionId]);
+
+  useEffect(() => { loadStats(); }, [loadStats]);
 
   const load = useCallback(
     async (forceRefresh = false) => {
@@ -287,6 +332,9 @@ export function RegionalChecklist() {
           Обновить
         </button>
       </div>
+
+      {/* Stats by year/month */}
+      <ChecklistStats history={obsHistory} loading={statsLoading} />
 
       {/* Progress bar */}
       {(loadState === 'enriching' || loadState === 'done') && total > 0 && (

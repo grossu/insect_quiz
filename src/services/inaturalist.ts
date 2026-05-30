@@ -294,6 +294,50 @@ export async function fetchRussianNames(taxonIds: number[]): Promise<Map<number,
   return result;
 }
 
+export interface ObsPoint {
+  taxonId: number;
+  observed_on: string;
+}
+
+export async function fetchUserObservationsAll(
+  userLogin: string,
+  taxonId: number,
+  placeIds: number[]
+): Promise<ObsPoint[]> {
+  const result: ObsPoint[] = [];
+  try {
+    let page = 1;
+    while (true) {
+      const r = await fetchWithRetry(
+        `${INATURALIST_API}/observations?` +
+          new URLSearchParams({
+            user_login: userLogin,
+            taxon_id: String(taxonId),
+            place_id: placeIds.join(','),
+            order: 'asc',
+            order_by: 'observed_on',
+            per_page: '200',
+            page: String(page),
+            rank: 'species',
+          })
+      );
+      if (!r.ok) break;
+      const data = await r.json();
+      const obs: Array<{ taxon?: { id: number }; observed_on?: string }> = data.results ?? [];
+      for (const ob of obs) {
+        const tid = ob.taxon?.id;
+        const date = ob.observed_on;
+        if (tid && date) result.push({ taxonId: tid, observed_on: date });
+      }
+      if (obs.length < 200) break;
+      page++;
+    }
+  } catch {
+    // return whatever we got
+  }
+  return result;
+}
+
 export async function fetchUserFirstObservations(
   userLogin: string,
   taxonIds: number[],
