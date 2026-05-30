@@ -2,6 +2,24 @@ import { InsectObservation, QuizQuestion, AnswerOption, InatSpeciesCountResult }
 
 const INATURALIST_API = 'https://api.inaturalist.org/v1';
 
+async function fetchWithRetry(url: string, retries = 3, delayMs = 1000): Promise<Response> {
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const res = await fetch(url);
+      if (res.ok) return res;
+      if (res.status === 429 || res.status >= 500) {
+        if (attempt < retries - 1) await new Promise(r => setTimeout(r, delayMs * (attempt + 1)));
+        continue;
+      }
+      return res;
+    } catch (err) {
+      if (attempt < retries - 1) await new Promise(r => setTimeout(r, delayMs * (attempt + 1)));
+      else throw err;
+    }
+  }
+  throw new Error('Не удалось загрузить данные после нескольких попыток');
+}
+
 function baseObservationParams(countryId: number, taxonIds: string[]): Record<string, string> {
   return {
     taxon_id: taxonIds.length > 0 ? taxonIds.join(',') : '47201',
@@ -67,7 +85,7 @@ export async function fetchRandomInsect(
 
 async function fetchTaxonNames(taxonId: number): Promise<{ russianName?: string }> {
   try {
-    const response = await fetch(`${INATURALIST_API}/taxa/${taxonId}?locale=ru`);
+    const response = await fetchWithRetry(`${INATURALIST_API}/taxa/${taxonId}?locale=ru`);
     if (!response.ok) return {};
     const data = await response.json();
     return { russianName: data.results[0]?.preferred_common_name };
@@ -187,7 +205,7 @@ async function fetchAllSpeciesCounts(
   params: Record<string, string>
 ): Promise<InatSpeciesCountResult[]> {
   const PER_PAGE = 500;
-  const firstRes = await fetch(
+  const firstRes = await fetchWithRetry(
     `${INATURALIST_API}/observations/species_counts?` +
       new URLSearchParams({ ...params, per_page: String(PER_PAGE), page: '1' })
   );
@@ -201,7 +219,7 @@ async function fetchAllSpeciesCounts(
   const totalPages = Math.ceil(total / PER_PAGE);
   const rest = await Promise.all(
     Array.from({ length: totalPages - 1 }, (_, i) => i + 2).map(async (page) => {
-      const r = await fetch(
+      const r = await fetchWithRetry(
         `${INATURALIST_API}/observations/species_counts?` +
           new URLSearchParams({ ...params, per_page: String(PER_PAGE), page: String(page) })
       );
@@ -285,7 +303,7 @@ export async function fetchUserFirstObservations(
   try {
     let page = 1;
     while (true) {
-      const r = await fetch(
+      const r = await fetchWithRetry(
         `${INATURALIST_API}/observations?` +
           new URLSearchParams({
             user_login: userLogin,
