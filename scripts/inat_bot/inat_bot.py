@@ -8,11 +8,16 @@ import urllib.parse
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-FEED_URL = (
-    "https://www.inaturalist.org/observations.atom"
-    "?quality_grade=needs_id%2Cresearch%2Ccasual"
-    "&taxon_id=126985&place_id=97391"
-)
+CONFIG_FILE = Path(__file__).parent / "config.json"
+
+
+def build_feed_url() -> str:
+    cfg = json.loads(CONFIG_FILE.read_text())
+    params = urllib.parse.urlencode({k: v for k, v in cfg.items() if v})
+    return f"https://www.inaturalist.org/observations.atom?{params}"
+
+
+FEED_URL = build_feed_url()
 BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 STATE_FILE = Path(__file__).parent / "seen_ids.json"
