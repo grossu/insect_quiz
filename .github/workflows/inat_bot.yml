@@ -1,0 +1,29 @@
+name: iNaturalist Telegram Bot
+
+on:
+  schedule:
+    - cron: "0 * * * *"   # каждый час
+  workflow_dispatch:        # ручной запуск из интерфейса GitHub
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run bot
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python3 scripts/inat_bot/inat_bot.py
+
+      - name: Save seen_ids state
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add scripts/inat_bot/seen_ids.json
+          git diff --cached --quiet || git commit -m "bot: update seen_ids"
+          git push
