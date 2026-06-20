@@ -2,7 +2,7 @@ name: iNaturalist Telegram Bot
 
 on:
   schedule:
-    - cron: "0 * * * *"   # каждый час
+    - cron: "0 8 * * *"   # раз в сутки в 08:00 UTC
   workflow_dispatch:        # ручной запуск из интерфейса GitHub
 
 jobs:

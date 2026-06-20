@@ -7,17 +7,25 @@ import urllib.request
 import urllib.parse
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from datetime import date
 
 CONFIG_FILE = Path(__file__).parent / "config.json"
 
 
-def build_feed_url() -> str:
-    cfg = json.loads(CONFIG_FILE.read_text())
+def load_config() -> dict:
+    return json.loads(CONFIG_FILE.read_text())
+
+
+def build_feed_url(cfg: dict) -> str:
     params = urllib.parse.urlencode({k: v for k, v in cfg.items() if v})
     return f"https://www.inaturalist.org/observations.atom?{params}"
 
 
-FEED_URL = build_feed_url()
+def build_identify_url(cfg: dict) -> str:
+    params = urllib.parse.urlencode({k: v for k, v in cfg.items() if v})
+    return f"https://www.inaturalist.org/observations/identify?{params}"
+
+
 BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 STATE_FILE = Path(__file__).parent / "seen_ids.json"
@@ -38,18 +46,10 @@ def save_seen(seen: set) -> None:
     STATE_FILE.write_text(json.dumps(list(seen)))
 
 
-def fetch_feed() -> ET.Element:
-    req = urllib.request.Request(
-        FEED_URL,
-        headers={"User-Agent": "inat-tg-bot/1.0"},
-    )
+def fetch_feed(url: str) -> ET.Element:
+    req = urllib.request.Request(url, headers={"User-Agent": "inat-tg-bot/1.0"})
     with urllib.request.urlopen(req, timeout=30) as r:
         return ET.fromstring(r.read())
-
-
-def extract_first_image(html: str) -> str | None:
-    m = re.search(r'<img\s+src="([^"]+)"', html)
-    return m.group(1) if m else None
 
 
 def tg_api(method: str, params: dict) -> dict:
@@ -60,71 +60,55 @@ def tg_api(method: str, params: dict) -> dict:
         return json.loads(r.read())
 
 
-def format_date(iso: str) -> str:
-    try:
-        d = iso[:10].split("-")
-        return f"{d[2]}.{d[1]}.{d[0]}"
-    except Exception:
-        return iso
+def send_daily_digest(count: int, species: list[str], identify_url: str) -> None:
+    today = date.today().strftime("%d.%m.%Y")
+    lines = [f"🦋 <b>Дайджест наблюдений за {today}</b>", f"", f"Новых наблюдений: <b>{count}</b>"]
 
+    if species:
+        unique = list(dict.fromkeys(species))[:10]
+        lines.append("")
+        lines.append("Виды:")
+        for s in unique:
+            lines.append(f"  • {s}")
+        if len(dict.fromkeys(species)) > 10:
+            lines.append(f"  … и ещё {len(dict.fromkeys(species)) - 10}")
 
-def send_observation(title: str, author: str, location: str, date: str, link: str, img_url: str | None) -> None:
-    caption = (
-        f"<b>{title}</b>\n"
-        f"👤 {author}\n"
-        f"📍 {location}\n"
-        f"📅 {date}\n"
-        f'🔗 <a href="{link}">Открыть на iNaturalist</a>'
-    )
-    if img_url:
-        tg_api("sendPhoto", {
-            "chat_id": CHAT_ID,
-            "photo": img_url,
-            "caption": caption,
-            "parse_mode": "HTML",
-        })
-    else:
-        tg_api("sendMessage", {
-            "chat_id": CHAT_ID,
-            "text": caption,
-            "parse_mode": "HTML",
-        })
-    time.sleep(1)
+    lines += ["", f'🔍 <a href="{identify_url}">Открыть на iNaturalist для идентификации</a>']
+
+    tg_api("sendMessage", {
+        "chat_id": CHAT_ID,
+        "text": "\n".join(lines),
+        "parse_mode": "HTML",
+        "disable_web_page_preview": "false",
+    })
 
 
 def main() -> None:
-    seen = load_seen()
-    root = fetch_feed()
-    new_count = 0
+    cfg = load_config()
+    feed_url = build_feed_url(cfg)
+    identify_url = build_identify_url(cfg)
 
-    entries = root.findall("atom:entry", NS)
-    # oldest-first so messages arrive in chronological order
-    for entry in reversed(entries):
+    seen = load_seen()
+    root = fetch_feed(feed_url)
+
+    new_ids: list[str] = []
+    species: list[str] = []
+
+    for entry in reversed(root.findall("atom:entry", NS)):
         obs_id = entry.findtext("atom:id", default="", namespaces=NS)
         if obs_id in seen:
             continue
-
         title = entry.findtext("atom:title", default="?", namespaces=NS)
-        author_el = entry.find("atom:author/atom:name", NS)
-        author = author_el.text if author_el is not None else "?"
-        location = entry.findtext("georss:featureName", default="", namespaces=NS)
-        published = entry.findtext("atom:published", default="", namespaces=NS)
-        date = format_date(published)
-        link_el = entry.find("atom:link[@rel='alternate']", NS)
-        link = link_el.attrib.get("href", "") if link_el is not None else ""
-        content = entry.findtext("atom:content", default="", namespaces=NS)
-        img_url = extract_first_image(content)
-
-        send_observation(title, author, location, date, link, img_url)
+        new_ids.append(obs_id)
+        species.append(title)
         seen.add(obs_id)
-        save_seen(seen)
-        new_count += 1
-        print(f"Sent: {obs_id} — {title}")
 
-    if new_count == 0:
-        print("No new observations.")
+    if new_ids:
+        send_daily_digest(len(new_ids), species, identify_url)
+        save_seen(seen)
+        print(f"Done: {len(new_ids)} new observations sent in digest.")
     else:
-        print(f"Done: {new_count} sent.")
+        print("No new observations.")
 
 
 if __name__ == "__main__":
