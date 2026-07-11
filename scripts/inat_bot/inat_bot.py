@@ -1,39 +1,30 @@
 #!/usr/bin/env python3
 import json
 import os
-import re
-import time
 import urllib.request
 import urllib.parse
-import xml.etree.ElementTree as ET
 from pathlib import Path
 from datetime import date
+from collections import Counter
 
 CONFIG_FILE = Path(__file__).parent / "config.json"
+STATE_FILE = Path(__file__).parent / "seen_ids.json"
+
+BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
+CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
+
+API_URL = "https://api.inaturalist.org/v1/observations"
+MAX_PAGES = 10          # предохранитель: не более 10*200 = 2000 наблюдений за запуск
+PER_PAGE = 200
 
 
 def load_config() -> dict:
     return json.loads(CONFIG_FILE.read_text())
 
 
-def build_feed_url(cfg: dict) -> str:
-    params = urllib.parse.urlencode({k: v for k, v in cfg.items() if v})
-    return f"https://www.inaturalist.org/observations.atom?{params}"
-
-
 def build_identify_url(cfg: dict) -> str:
     params = urllib.parse.urlencode({k: v for k, v in cfg.items() if v})
     return f"https://www.inaturalist.org/observations/identify?{params}"
-
-
-BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
-CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
-STATE_FILE = Path(__file__).parent / "seen_ids.json"
-
-NS = {
-    "atom": "http://www.w3.org/2005/Atom",
-    "georss": "http://www.georss.org/georss",
-}
 
 
 def load_seen() -> set:
@@ -43,13 +34,41 @@ def load_seen() -> set:
 
 
 def save_seen(seen: set) -> None:
-    STATE_FILE.write_text(json.dumps(list(seen)))
+    STATE_FILE.write_text(json.dumps(sorted(seen)))
 
 
-def fetch_feed(url: str) -> ET.Element:
+def api_get(params: dict) -> dict:
+    url = f"{API_URL}?{urllib.parse.urlencode(params)}"
     req = urllib.request.Request(url, headers={"User-Agent": "inat-tg-bot/1.0"})
-    with urllib.request.urlopen(req, timeout=30) as r:
-        return ET.fromstring(r.read())
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return json.loads(r.read())
+
+
+def fetch_observations(cfg: dict) -> list[dict]:
+    """Собирает наблюдения (новейшие сверху), проходя по страницам."""
+    base = {k: v for k, v in cfg.items() if v}
+    base.update({
+        "order": "desc",
+        "order_by": "created_at",
+        "per_page": PER_PAGE,
+    })
+    results: list[dict] = []
+    for page in range(1, MAX_PAGES + 1):
+        data = api_get({**base, "page": page})
+        batch = data.get("results", [])
+        if not batch:
+            break
+        results.extend(batch)
+        if len(batch) < PER_PAGE:
+            break
+    return results
+
+
+def country_of(place_guess: str) -> str:
+    # последний сегмент строки локации обычно — страна
+    if not place_guess:
+        return "—"
+    return place_guess.split(",")[-1].strip() or "—"
 
 
 def tg_api(method: str, params: dict) -> dict:
@@ -60,55 +79,100 @@ def tg_api(method: str, params: dict) -> dict:
         return json.loads(r.read())
 
 
-def send_daily_digest(count: int, species: list[str], identify_url: str) -> None:
-    today = date.today().strftime("%d.%m.%Y")
-    lines = [f"🦋 <b>Дайджест наблюдений за {today}</b>", f"", f"Новых наблюдений: <b>{count}</b>"]
+def format_date(iso: str) -> str:
+    # "2026-07-11" → "11.07"
+    try:
+        y, m, d = iso[:10].split("-")
+        return f"{d}.{m}"
+    except Exception:
+        return iso or "?"
 
-    if species:
-        unique = list(dict.fromkeys(species))[:10]
-        lines.append("")
-        lines.append("Виды:")
-        for s in unique:
-            lines.append(f"  • {s}")
-        if len(dict.fromkeys(species)) > 10:
-            lines.append(f"  … и ещё {len(dict.fromkeys(species)) - 10}")
+
+def build_digest(observations: list[dict], identify_url: str) -> str:
+    today = date.today().strftime("%d.%m.%Y")
+    count = len(observations)
+
+    species = Counter()
+    observers = Counter()
+    countries = Counter()
+    obs_dates = []
+
+    for o in observations:
+        taxon = o.get("taxon") or {}
+        name = taxon.get("name") or "—"
+        rank = taxon.get("rank") or ""
+        # для рода/подрода даём отметку ранга, чтобы было видно точность
+        label = name if rank in ("species", "subspecies") else f"{name} ({rank})" if rank else name
+        species[label] += 1
+
+        user = o.get("user") or {}
+        observers[user.get("login") or "—"] += 1
+
+        countries[country_of(o.get("place_guess") or "")] += 1
+
+        if o.get("observed_on"):
+            obs_dates.append(o["observed_on"][:10])
+
+    lines = [
+        f"🦋 <b>Дайджест наблюдений за {today}</b>",
+        "",
+        f"Новых наблюдений: <b>{count}</b>",
+        f"Видов/таксонов: <b>{len(species)}</b>",
+    ]
+
+    if obs_dates:
+        lo, hi = min(obs_dates), max(obs_dates)
+        span = format_date(lo) if lo == hi else f"{format_date(lo)}–{format_date(hi)}"
+        lines.append(f"Даты съёмки: <b>{span}</b>")
+
+    # виды с количеством, по убыванию
+    lines += ["", "<b>Таксоны:</b>"]
+    for name, n in species.most_common(12):
+        lines.append(f"  • <i>{name}</i> — {n}")
+    if len(species) > 12:
+        lines.append(f"  … и ещё {len(species) - 12} таксонов")
+
+    # топ наблюдателей
+    top_obs = observers.most_common(3)
+    if top_obs:
+        lines += ["", "<b>Активнее всех:</b>"]
+        for login, n in top_obs:
+            lines.append(f"  • {login} — {n}")
+
+    # география
+    top_countries = countries.most_common(5)
+    if top_countries:
+        geo = ", ".join(f"{c} ({n})" for c, n in top_countries)
+        lines += ["", f"🌍 {geo}"]
 
     lines += ["", f'🔍 <a href="{identify_url}">Открыть на iNaturalist для идентификации</a>']
-
-    tg_api("sendMessage", {
-        "chat_id": CHAT_ID,
-        "text": "\n".join(lines),
-        "parse_mode": "HTML",
-        "disable_web_page_preview": "false",
-    })
+    return "\n".join(lines)
 
 
 def main() -> None:
     cfg = load_config()
-    feed_url = build_feed_url(cfg)
     identify_url = build_identify_url(cfg)
-
     seen = load_seen()
-    root = fetch_feed(feed_url)
 
-    new_ids: list[str] = []
-    species: list[str] = []
+    observations = fetch_observations(cfg)
+    new = [o for o in observations if str(o.get("id")) not in seen]
 
-    for entry in reversed(root.findall("atom:entry", NS)):
-        obs_id = entry.findtext("atom:id", default="", namespaces=NS)
-        if obs_id in seen:
-            continue
-        title = entry.findtext("atom:title", default="?", namespaces=NS)
-        new_ids.append(obs_id)
-        species.append(title)
-        seen.add(obs_id)
-
-    if new_ids:
-        send_daily_digest(len(new_ids), species, identify_url)
-        save_seen(seen)
-        print(f"Done: {len(new_ids)} new observations sent in digest.")
-    else:
+    if not new:
         print("No new observations.")
+        return
+
+    text = build_digest(new, identify_url)
+    tg_api("sendMessage", {
+        "chat_id": CHAT_ID,
+        "text": text,
+        "parse_mode": "HTML",
+        "disable_web_page_preview": "true",
+    })
+
+    for o in new:
+        seen.add(str(o.get("id")))
+    save_seen(seen)
+    print(f"Done: {len(new)} new observations sent in digest.")
 
 
 if __name__ == "__main__":
