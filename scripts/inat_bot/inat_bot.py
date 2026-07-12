@@ -27,6 +27,13 @@ def build_identify_url(cfg: dict) -> str:
     return f"https://www.inaturalist.org/observations/identify?{params}"
 
 
+def build_taxon_obs_url(cfg: dict, taxon_id) -> str:
+    # ссылка на наблюдения конкретного таксона с учётом фильтров места/качества
+    params = {k: v for k, v in cfg.items() if v}
+    params["taxon_id"] = taxon_id
+    return f"https://www.inaturalist.org/observations?{urllib.parse.urlencode(params)}"
+
+
 def load_seen() -> set:
     if STATE_FILE.exists():
         return set(json.loads(STATE_FILE.read_text()))
@@ -88,49 +95,104 @@ def format_date(iso: str) -> str:
         return iso or "?"
 
 
-def build_digest(observations: list[dict], identify_url: str) -> str:
-    today = date.today().strftime("%d.%m.%Y")
-    count = len(observations)
+SPECIES_RANKS = ("species", "subspecies", "variety", "form", "hybrid")
+GENUS_RANKS = ("genus", "subgenus", "section", "subsection", "complex", "series")
 
-    species = Counter()
-    observers = Counter()
-    countries = Counter()
-    obs_dates = []
+
+def group_taxa(observations: list[dict]) -> tuple[dict, dict]:
+    """Группирует наблюдения по родам с вложенными видами.
+
+    Возвращает (genera, higher):
+      genera[genus] = {
+        "species": {full_name: {"count": n, "taxon_id": id}},
+        "genus_only": {"count": n, "taxon_id": id} | None,  # определено только до рода
+      }
+      higher[name] = {"count": n, "taxon_id": id, "rank": rank}  # семейство и выше
+    """
+    genera: dict = {}
+    higher: dict = {}
 
     for o in observations:
         taxon = o.get("taxon") or {}
         name = taxon.get("name") or "—"
         rank = taxon.get("rank") or ""
-        # для рода/подрода даём отметку ранга, чтобы было видно точность
-        label = name if rank in ("species", "subspecies") else f"{name} ({rank})" if rank else name
-        species[label] += 1
+        tid = taxon.get("id")
 
+        if rank in SPECIES_RANKS:
+            genus = name.split()[0]
+            g = genera.setdefault(genus, {"species": {}, "genus_only": None})
+            leaf = g["species"].setdefault(name, {"count": 0, "taxon_id": tid})
+            leaf["count"] += 1
+        elif rank in GENUS_RANKS:
+            genus = name.split()[0]
+            g = genera.setdefault(genus, {"species": {}, "genus_only": None})
+            if g["genus_only"] is None:
+                g["genus_only"] = {"count": 0, "taxon_id": tid}
+            g["genus_only"]["count"] += 1
+        else:
+            h = higher.setdefault(name, {"count": 0, "taxon_id": tid, "rank": rank})
+            h["count"] += 1
+
+    return genera, higher
+
+
+def build_digest(observations: list[dict], cfg: dict, identify_url: str) -> str:
+    today = date.today().strftime("%d.%m.%Y")
+    count = len(observations)
+
+    observers = Counter()
+    countries = Counter()
+    obs_dates = []
+    for o in observations:
         user = o.get("user") or {}
         observers[user.get("login") or "—"] += 1
-
         countries[country_of(o.get("place_guess") or "")] += 1
-
         if o.get("observed_on"):
             obs_dates.append(o["observed_on"][:10])
+
+    genera, higher = group_taxa(observations)
+    taxa_total = sum(len(g["species"]) + (1 if g["genus_only"] else 0) for g in genera.values()) + len(higher)
+
+    def link(text: str, taxon_id) -> str:
+        if taxon_id is None:
+            return text
+        return f'<a href="{build_taxon_obs_url(cfg, taxon_id)}">{text}</a>'
 
     lines = [
         f"🦋 <b>Дайджест наблюдений за {today}</b>",
         "",
         f"Новых наблюдений: <b>{count}</b>",
-        f"Видов/таксонов: <b>{len(species)}</b>",
+        f"Таксонов: <b>{taxa_total}</b>",
     ]
-
     if obs_dates:
         lo, hi = min(obs_dates), max(obs_dates)
         span = format_date(lo) if lo == hi else f"{format_date(lo)}–{format_date(hi)}"
         lines.append(f"Даты съёмки: <b>{span}</b>")
 
-    # виды с количеством, по убыванию
+    # роды по алфавиту, внутри — виды по алфавиту
     lines += ["", "<b>Таксоны:</b>"]
-    for name, n in species.most_common(12):
-        lines.append(f"  • <i>{name}</i> — {n}")
-    if len(species) > 12:
-        lines.append(f"  … и ещё {len(species) - 12} таксонов")
+    for genus in sorted(genera):
+        g = genera[genus]
+        lines.append(f"<b>{genus}</b>")
+        # собираем детей: сначала "до рода", затем виды по алфавиту
+        children = []
+        if g["genus_only"]:
+            info = g["genus_only"]
+            children.append(f"{link('(до рода)', info['taxon_id'])} — {info['count']}")
+        for sp in sorted(g["species"]):
+            info = g["species"][sp]
+            epithet = sp.split(" ", 1)[1] if " " in sp else sp
+            children.append(f"<i>{link(epithet, info['taxon_id'])}</i> — {info['count']}")
+        for i, child in enumerate(children):
+            branch = "└" if i == len(children) - 1 else "├"
+            lines.append(f"  {branch} {child}")
+
+    # семейство и выше — отдельным блоком
+    if higher:
+        lines += ["", "<b>Определены до семейства и выше:</b>"]
+        for name in sorted(higher):
+            info = higher[name]
+            lines.append(f"  • {link(name, info['taxon_id'])} — {info['count']}")
 
     # топ наблюдателей
     top_obs = observers.most_common(3)
@@ -149,6 +211,21 @@ def build_digest(observations: list[dict], identify_url: str) -> str:
     return "\n".join(lines)
 
 
+def split_message(text: str, limit: int = 4000) -> list[str]:
+    """Разбивает длинное сообщение по строкам, не превышая лимит Telegram."""
+    if len(text) <= limit:
+        return [text]
+    chunks, cur = [], ""
+    for line in text.split("\n"):
+        if cur and len(cur) + len(line) + 1 > limit:
+            chunks.append(cur)
+            cur = ""
+        cur = f"{cur}\n{line}" if cur else line
+    if cur:
+        chunks.append(cur)
+    return chunks
+
+
 def main() -> None:
     cfg = load_config()
     identify_url = build_identify_url(cfg)
@@ -161,13 +238,14 @@ def main() -> None:
         print("No new observations.")
         return
 
-    text = build_digest(new, identify_url)
-    tg_api("sendMessage", {
-        "chat_id": CHAT_ID,
-        "text": text,
-        "parse_mode": "HTML",
-        "disable_web_page_preview": "true",
-    })
+    text = build_digest(new, cfg, identify_url)
+    for chunk in split_message(text):
+        tg_api("sendMessage", {
+            "chat_id": CHAT_ID,
+            "text": chunk,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": "true",
+        })
 
     for o in new:
         seen.add(str(o.get("id")))
